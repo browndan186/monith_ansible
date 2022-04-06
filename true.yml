@@ -1,0 +1,93 @@
+---
+
+- name: Install Monit and configure redis
+
+  hosts: localhost
+
+  become: yes
+
+  become_method: sudo
+
+  gather_facts: yes
+
+  tags: [install]
+
+  tasks:
+
+    - name: Update the software package repository
+
+      apt:
+
+         update_cache: yes
+
+    - name: Install monit
+
+      package:
+
+        name: monit
+
+        state: latest
+
+    - name: start monit
+      command: monit
+
+
+    - name: Enable monit
+      systemd:
+        name: monit
+        enabled: true
+        masked: no
+
+    - lineinfile:
+
+        path: /etc/monit/monitrc
+
+        regexp: " httpd port 2812 "
+
+        line: " set httpd port 2812 and "
+
+    - lineinfile:
+
+        path: /etc/monit/monitrc
+
+        regexp: "# allow admin:monit"
+
+        line: " allow admin:monit "
+
+
+    - name: Restart monit service
+
+      systemd:
+
+        name: monit.service
+
+        state: restarted
+
+    - name: monitoring redis
+      blockinfile:
+        dest: /etc/monit/monitrc
+        block: |
+            #redis
+             check process redis with pidfile /var/run/redis/redis-server.pid
+               group cache
+               group redis
+               start program = "/usr/sbin/service redis-server start" with timeout 60 seconds
+               stop program  = "/usr/sbin/service redis-server stop" with timeout 60 seconds
+               if failed host 0.0.0.0 port 7000 then restart
+               depend redis_bin
+               depend redis_rc
+             check file redis_bin with path /usr/bin/redis-server
+               group redis
+               include /etc/monit/templates/rootbin
+
+             check file redis_rc with path /etc/init.d/redis-server
+               group redis
+               include /etc/monit/templates/rootbin
+
+    - name: Restart monit service
+
+      systemd:
+
+       name: monit.service
+
+       state: restarted
